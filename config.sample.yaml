@@ -1,0 +1,8 @@
+jabber:
+    jid:        "sample@jid/resource"
+    password:   "password"
+    conference: "sample@conference.jabber.tld"
+    nickname:   "SUPER NEURO ZHOBA"
+    skip_tls:    True # needs to be fixed
+zhobe:
+    root: "/home/der/gloox/"

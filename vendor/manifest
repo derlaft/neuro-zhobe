@@ -1,0 +1,17 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/kljensen/snowball",
+			"repository": "https://github.com/kljensen/snowball",
+			"revision": "6d9a0d848e25fa387d9490a7ea9f04baecc61355",
+			"branch": "master"
+		},
+		{
+			"importpath": "gopkg.in/yaml.v2",
+			"repository": "https://gopkg.in/yaml.v2",
+			"revision": "cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b",
+			"branch": "v2"
+		}
+	]
+}
