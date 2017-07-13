@@ -9,6 +9,7 @@ extern "C" {
     void BotConnect(GBot, char*, char*, char*);
     void BotDisconnect(GBot);
     void BotReply(GBot, char*);
+    void BotReplyPrivate(GBot, char*, char*);
     void BotKick(GBot, char*, char*);
     char* BotNick(GBot);
     void BotPingRoom(GBot);

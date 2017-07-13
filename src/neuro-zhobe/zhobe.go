@@ -36,7 +36,7 @@ func (z *NeuroZhobe) OnConnect() {
 }
 
 func (z *NeuroZhobe) OnDisconnect(err error) {
-	fmt.Println("Disconnected from server (err=", err, ")")
+	log.Printf("Disconnected from server (err=%v)", err)
 }
 
 func (z *NeuroZhobe) OnMUCPresence(p *glb.MUCPresence) {
@@ -50,10 +50,20 @@ func (z *NeuroZhobe) OnMUCMessage(msg *glb.MUCMessage) {
 		return // skip old messags
 	}
 
+	// Log message first
+	log.Printf("%v: %v", msg.From, msg.Body)
+
+	if msg.From == z.bot.Nickname() {
+		return // skip self messages
+	}
+
 	for _, handler := range handlers {
 		match, err := handler(z, msg)
 		if err != nil {
-			z.bot.Send(fmt.Sprintf("%v: %v", msg.From, err.Error()))
+			z.bot.Send(fmt.Sprintf("%v: 542 SHIT HAPPEND", msg.From))
+			if z.admins[msg.From] {
+				z.bot.SendPrivate(err.Error(), msg.From)
+			}
 			return
 		}
 

@@ -16,11 +16,16 @@ func (z *NeuroZhobe) CallRegexp() *regexp.Regexp {
 
 func callHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 	if found := z.CallRegexp().FindStringIndex(msg.Body); len(found) >= 2 {
-		messageBody := msg.Body[found[1]:]
-		answer, err := z.execute("./chat/answer", msg.From, messageBody)
+		var (
+			messageBody = msg.Body[found[1]:]
+			isAdmin     = fmt.Sprintf("%v", z.admins[msg.From])
+		)
+
+		answer, err := z.execute("./chat/answer", msg.From, isAdmin, messageBody)
 		if err != nil {
 			return true, err
 		}
+
 		z.bot.Send(answer)
 		return true, nil
 	}

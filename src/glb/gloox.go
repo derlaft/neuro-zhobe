@@ -6,6 +6,8 @@ import "C"
 
 import (
 	"fmt"
+	"log"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -17,12 +19,13 @@ var (
 
 type (
 	GBot struct {
-		cobj        C.GBot
-		config      *Config
-		done        chan bool
-		cb          interface{}
-		lastPong    time.Time
-		healthCheck sync.Once
+		cobj          C.GBot
+		config        *Config
+		done          chan bool
+		cb            interface{}
+		lastPong      time.Time
+		healthCheck   sync.Once
+		disconnecting bool
 	}
 
 	Config struct {
@@ -30,8 +33,8 @@ type (
 		Password   string
 		Conference string
 		Nickname   string
-		SkipTLS    bool `yaml:"skip_tls"` // all hail to cx
-		IQTimeout  time.Duration
+		SkipTLS    bool          `yaml:"skip_tls"` // all hail to cx
+		IQTimeout  time.Duration `yaml:"iq_timeout"`
 	}
 
 	MUCMessage struct {
@@ -82,12 +85,12 @@ func instance(cobj C.GBot) *GBot {
 }
 
 func New(cb interface{}) *GBot {
-	registryLock.Lock()
 	ret := &GBot{
 		done: make(chan bool, 1),
 		cobj: C.BotInit(),
 		cb:   cb,
 	}
+	registryLock.Lock()
 	registry[ret.cobj] = ret
 	registryLock.Unlock()
 
@@ -107,43 +110,56 @@ func goOnTLSConnect(cobj C.GBot, status C.int) C.int {
 	return C.int(0)
 }
 
+//export goSched
+func goSched() {
+	runtime.Gosched()
+}
+
 //export goOnConnect
 func goOnConnect(cobj C.GBot) {
 	bot := instance(cobj)
-	if cb, ok := bot.cb.(OnConnect); ok {
-		go cb.OnConnect()
-	}
+	go func() {
 
-	go bot.healthCheck.Do(func() {
-		// allow some startup
-		bot.lastPong = time.Now()
-
-		for range time.Tick(time.Second) {
-			go C.BotPingRoom(bot.cobj)
-
-			if time.Since(bot.lastPong) > bot.config.IQTimeout {
-				fmt.Println("disconnectin")
-				bot.Disconnect()
-			}
+		if cb, ok := bot.cb.(OnConnect); ok {
+			go cb.OnConnect()
 		}
-	})
+
+		go bot.healthCheck.Do(func() {
+			// allow some startup
+			bot.lastPong = time.Now()
+
+			for range time.Tick(time.Second) {
+				go C.BotPingRoom(bot.cobj)
+
+				if time.Since(bot.lastPong) > bot.config.IQTimeout {
+					fmt.Println("disconnectin")
+					bot.Disconnect()
+				}
+			}
+		})
+
+	}()
 }
 
 //export goOnDisconnect
 func goOnDisconnect(cobj C.GBot, errCode, authErr C.int) {
 	bot := instance(cobj)
 
-	if cb, ok := bot.cb.(OnDisconnect); ok {
-		fmt.Println("ehoh")
-		var err error
-		if errCode > 0 || authErr > 0 {
-			err = fmt.Errorf("gld: dissonnected with error (errCode=%v, authError=%v)", errCode, authErr)
-		}
-
-		cb.OnDisconnect(err)
+	var err error
+	if errCode > 0 || authErr > 0 {
+		err = fmt.Errorf("gld: dissonnected with error (errCode=%v, authError=%v)", errCode, authErr)
 	}
 
-	bot.done <- true
+	go func() {
+
+		if cb, ok := bot.cb.(OnDisconnect); ok {
+			fmt.Println("ehoh", bot.disconnecting)
+
+			cb.OnDisconnect(err)
+		}
+
+		bot.done <- true
+	}()
 }
 
 //export goOnMessage
@@ -155,32 +171,38 @@ func goOnMessage(cobj C.GBot, raw_from, raw_msg *C.char, history, private bool) 
 		msg  = C.GoString(raw_msg)
 	)
 
-	if cb, ok := bot.cb.(OnMUCMessage); ok {
-		go cb.OnMUCMessage(&MUCMessage{
-			Body:    msg,
-			From:    from,
-			History: history,
-			Private: private,
-		})
-	}
+	go func() {
+		if cb, ok := bot.cb.(OnMUCMessage); ok {
+			cb.OnMUCMessage(&MUCMessage{
+				Body:    msg,
+				From:    from,
+				History: history,
+				Private: private,
+			})
+		}
+	}()
 }
 
 //export goOnPresence
-func goOnPresence(cobj C.GBot, raw_nick *C.char, online, admin bool) {
+func goOnPresence(cobj C.GBot, raw_nick *C.char, raw_online, raw_admin bool) {
 
 	var (
-		bot  = instance(cobj)
-		nick = C.GoString(raw_nick)
+		bot    = instance(cobj)
+		nick   = C.GoString(raw_nick)
+		online = raw_online
+		admin  = raw_admin
 	)
 
-	if cb, ok := bot.cb.(OnMUCPresence); ok {
-		go cb.OnMUCPresence(&MUCPresence{
-			Nick:   nick,
-			Online: online,
-			Admin:  admin,
-		})
-	}
+	go func() {
 
+		if cb, ok := bot.cb.(OnMUCPresence); ok {
+			cb.OnMUCPresence(&MUCPresence{
+				Nick:   nick,
+				Online: online,
+				Admin:  admin,
+			})
+		}
+	}()
 }
 
 //export goOnMUCSubject
@@ -192,9 +214,11 @@ func goOnMUCSubject(cobj C.GBot, raw_nick, raw_subject *C.char) {
 		subject = C.GoString(raw_subject)
 	)
 
-	if cb, ok := bot.cb.(OnMUCSubject); ok {
-		go cb.OnMUCSubject(nick, subject)
-	}
+	go func() {
+		if cb, ok := bot.cb.(OnMUCSubject); ok {
+			cb.OnMUCSubject(nick, subject)
+		}
+	}()
 }
 
 //export goOnPing
@@ -204,6 +228,14 @@ func goOnPing(cobj C.GBot, success bool) {
 	if success {
 		bot.lastPong = time.Now()
 	}
+}
+
+//export goOnError
+func goOnError(cobj C.GBot, errcode int) {
+
+	var bot = instance(cobj)
+	_ = bot
+	log.Println("Got muc error: %v", errcode)
 }
 
 func (b *GBot) Free() {
@@ -217,15 +249,19 @@ func (b *GBot) Connect(config *Config) {
 		b.config.IQTimeout = time.Second * 10
 	}
 
-	go C.BotConnect(
-		b.cobj,
-		C.CString(config.JID),
-		C.CString(config.Password),
-		C.CString(fmt.Sprintf("%v/%v", config.Conference, config.Nickname)),
-	)
+	go func() {
+
+		C.BotConnect(
+			b.cobj,
+			C.CString(config.JID),
+			C.CString(config.Password),
+			C.CString(fmt.Sprintf("%v/%v", config.Conference, config.Nickname)),
+		)
+	}()
 }
 
 func (b *GBot) Disconnect() {
+	b.disconnecting = true
 	C.BotDisconnect(b.cobj)
 }
 
@@ -234,14 +270,22 @@ func (b *GBot) Nickname() string {
 }
 
 func (b *GBot) Send(message string) {
-	go C.BotReply(
+	C.BotReply(
 		b.cobj,
 		C.CString(message),
 	)
 }
 
+func (b *GBot) SendPrivate(message, recipient string) {
+	C.BotReplyPrivate(
+		b.cobj,
+		C.CString(message),
+		C.CString(recipient),
+	)
+}
+
 func (b *GBot) Kick(who, forWhat string) {
-	go C.BotKick(
+	C.BotKick(
 		b.cobj,
 		C.CString(who),
 		C.CString(forWhat),

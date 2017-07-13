@@ -15,6 +15,7 @@
 #include "gloox/stanza.h"
 #include "gloox/error.h"
 #include "gloox/eventhandler.h"
+#include "gloox/messagesession.h"
 
 using namespace gloox;
 using namespace std;
@@ -33,25 +34,30 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
     virtual ~Bot() {}
 
     void start(char *uname, char *pwd, char *muc) {
-      JID jid(uname);
-      j = new Client(jid, pwd);
+      jid = new JID(uname);
+
+      j = new Client(*jid, pwd);
       j->registerConnectionListener(this);
       j->setPresence( Presence::Available, -1 );
       j->setCompression( false );
 
     //  j->logInstance().registerLogHandler( LogLevelDebug, LogAreaAll, this );
 
-      JID nick (muc);
-      m_room = new MUCRoom(j, nick, this, 0);
+      muc_jid = new JID(muc);
+
+      m_room = new MUCRoom(j, *muc_jid, this, 0);
 
       if(j->connect(false)) {
         ConnectionError ce = ConnNoError;
         while(ce == ConnNoError) {
-          ce = j->recv();
+          goSched();
+          ce = j->recv(100);
         }
       }
 
       // cleanup
+      delete jid;
+      delete muc_jid;
       delete m_room;
       delete j;
     }
@@ -75,6 +81,22 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
 
         std::string msg(what);
         m_room->send(msg);
+    }
+
+    void reply_private(char *what, char *whom) {
+        if (!m_room) {
+            return;
+        }
+
+        std::string msg(what);
+        JID recipient(muc_jid->bare() + "/" + whom);
+
+        printf("wat %s\n", recipient.full().c_str());
+
+        auto ms = new MessageSession(j, recipient);
+        ms->send(msg);
+
+        delete ms;
     }
 
     void ping() {
@@ -180,8 +202,8 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
             return;
         }
 
-        // else -- better disconnect; let systemd resolve timings and etc
-        j->disconnect();
+        // else -- report issue
+        goOnError(this, error);
     }
 
     virtual void handleMUCInfo(MUCRoom * /*room*/, int features, const std::string& name, const DataForm* infoForm) {
@@ -198,6 +220,8 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
     }
 
   private:
+    JID *jid;
+    JID *muc_jid;
     Client *j;
     MUCRoom *m_room;
 };

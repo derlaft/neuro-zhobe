@@ -63,16 +63,18 @@ func commandHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 		search := path.Join(z.config.Zhobe.Root, "./plugins/", path.Base(command))
 		// check if file exists
 		if _, err := os.Stat(search); os.IsNotExist(err) {
-			return false, nil
+			return true, fmt.Errorf("WAT")
 		}
 
 		// execute plugin file
 		result, err := z.executePlugin(search, msg.From, params, z.admins[msg.From])
+		if result > "" {
+			z.bot.Send(result)
+		}
 		if err != nil {
 			return true, err
 		}
 
-		z.bot.Send(fmt.Sprintf("%v: %v", msg.From, result))
 		return true, nil
 	}
 
@@ -99,6 +101,7 @@ func (z *NeuroZhobe) execute(path string, args ...string) (string, error) {
 
 	out, _ := ioutil.ReadAll(stdout)
 	outerr, _ := ioutil.ReadAll(stderr)
+
 	cmd.Wait()
 
 	var err error = nil

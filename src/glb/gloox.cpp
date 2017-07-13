@@ -27,6 +27,11 @@ void BotReply(GBot b, char *what) {
     bot->reply(what);
 }
 
+void BotReplyPrivate(GBot b, char *what, char *whom) {
+    auto bot = (Bot *) b;
+    bot->reply_private(what, whom);
+}
+
 void BotKick(GBot b, char *who, char *reason) {
     auto bot = (Bot *) b;
     bot->kick(who, reason);
