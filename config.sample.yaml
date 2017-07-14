@@ -1,8 +1,13 @@
-jabber:
-    jid:        "sample@jid/resource"
-    password:   "password"
-    conference: "sample@conference.jabber.tld"
-    nickname:   "SUPER NEURO ZHOBA"
-    skip_tls:    True # needs to be fixed
 zhobe:
-    root: "/home/der/gloox/"
+    ttyh:
+        restart_timeout: 3s
+        root: "/path/to/root/"
+        jabber:
+            jid:        "test@example.tld/resource"
+            password:   "password"
+            conference: "ttyh@conference.example.org"
+            nickname:   "BotNickname"
+            skip_tls:    True
+        gsend:
+            listen: "127.0.0.1:4042"
+            secret: "secret_to_send_shit"

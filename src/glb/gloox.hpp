@@ -63,6 +63,12 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
     }
 
     void stop() {
+        if (m_room) {
+            m_room->leave();
+        }
+
+        j->disconnect();
+
         goOnDisconnect(this, -1, 0);
     }
 

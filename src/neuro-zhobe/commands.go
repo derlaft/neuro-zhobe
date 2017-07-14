@@ -63,7 +63,7 @@ func commandHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 
 	default:
 
-		search := path.Join(z.config.Zhobe.Root, "./plugins/", path.Base(command))
+		search := path.Join(z.config.Root, "./plugins/", path.Base(command))
 		// check if file exists
 		if _, err := os.Stat(search); os.IsNotExist(err) {
 			z.bot.Send(fmt.Sprintf("%v: WAT", msg.From))

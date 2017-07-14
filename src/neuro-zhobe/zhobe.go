@@ -6,14 +6,26 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
 	"sort"
+	"sync"
+	"syscall"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
 
-// all message handlers are there
-// init them in separate file's init()
-var handlers []messageHandler
+var (
+	// all message handlers are there
+	// init them in separate file's init()
+
+	handlers []messageHandler
+
+	// all the running toads are stored in there
+
+	toads     = map[string]*NeuroZhobe{}
+	toadsSync sync.RWMutex
+)
 
 type (
 	messageHandler struct {
@@ -25,14 +37,20 @@ type (
 		bot     *glb.GBot
 		admins  map[string]bool
 		onlines map[string]bool
-		config  *NeuroConfig
+		config  *Config
 	}
 
 	NeuroConfig struct {
-		Jabber *glb.Config
-		Zhobe  struct {
-			Root     string
-			FIFOPath string `yaml:"fifo_path"`
+		Zhobe map[string]Config
+	}
+
+	Config struct {
+		Jabber         *glb.Config
+		Root           string
+		RestartTimeout time.Duration `yaml:"restart_timeout"`
+		GSend          struct {
+			Listen string
+			Secret string
 		}
 	}
 )
@@ -112,14 +130,76 @@ func main() {
 		log.Fatal("Could not read config:", err)
 	}
 
-	var zhobe = &NeuroZhobe{
-		admins:  make(map[string]bool),
-		onlines: make(map[string]bool),
-		config:  config,
+	// bind shut-down
+	var (
+		sigs = make(chan os.Signal, 1)
+		stop bool
+		done sync.WaitGroup
+	)
+
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	for name, cfg := range config.Zhobe {
+		var (
+			copy     = cfg
+			nameCopy = name
+		)
+
+		if copy.RestartTimeout == 0 {
+			copy.RestartTimeout = time.Second * 2
+		}
+
+		var zhobe = &NeuroZhobe{
+			admins:  make(map[string]bool),
+			onlines: make(map[string]bool),
+			config:  &copy,
+		}
+
+		done.Add(1)
+		go func() {
+
+			for !stop {
+
+				zhobe.bot = glb.New(zhobe)
+				zhobe.bot.Connect(copy.Jabber)
+
+				// store this toad
+				toadsSync.Lock()
+				toads[nameCopy] = zhobe
+				toadsSync.Unlock()
+
+				zhobe.bot.Wait()
+
+				// unstore this toad so gsend won't work until it's really connected
+				toadsSync.Lock()
+				delete(toads, nameCopy)
+				toadsSync.Unlock()
+
+				zhobe.bot.Free()
+
+				// wait before reconnecting
+				if !stop {
+					time.Sleep(copy.RestartTimeout)
+				}
+			}
+
+			done.Done()
+		}()
+
 	}
 
-	zhobe.bot = glb.New(zhobe)
-	zhobe.bot.Connect(config.Jabber)
-	zhobe.bot.Wait()
-	zhobe.bot.Free()
+	// wait until termination signal
+	<-sigs
+	stop = true
+
+	// call all toads for sleep
+	toadsSync.RLock()
+	for _, toad := range toads {
+		toad.bot.Disconnect()
+	}
+	toadsSync.RUnlock()
+
+	// wait until all the toads are shutted down
+	done.Wait()
+
 }

@@ -150,16 +150,13 @@ func goOnDisconnect(cobj C.GBot, errCode, authErr C.int) {
 		err = fmt.Errorf("gld: dissonnected with error (errCode=%v, authError=%v)", errCode, authErr)
 	}
 
-	go func() {
+	if cb, ok := bot.cb.(OnDisconnect); ok {
+		fmt.Println("ehoh", bot.disconnecting)
 
-		if cb, ok := bot.cb.(OnDisconnect); ok {
-			fmt.Println("ehoh", bot.disconnecting)
+		cb.OnDisconnect(err)
+	}
 
-			cb.OnDisconnect(err)
-		}
-
-		bot.done <- true
-	}()
+	bot.done <- true
 }
 
 //export goOnMessage
