@@ -7,7 +7,10 @@ import (
 )
 
 func init() {
-	handlers = append(handlers, callHandler)
+	handlers = append(handlers, messageHandler{
+		cb:       callHandler,
+		priority: 100,
+	})
 }
 
 func (z *NeuroZhobe) CallRegexp() *regexp.Regexp {

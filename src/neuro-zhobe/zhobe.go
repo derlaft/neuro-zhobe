@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 
 	"gopkg.in/yaml.v2"
 )
@@ -14,22 +15,27 @@ import (
 // init them in separate file's init()
 var handlers []messageHandler
 
-type messageHandler func(*NeuroZhobe, *glb.MUCMessage) (bool, error)
-
-type NeuroZhobe struct {
-	bot     *glb.GBot
-	admins  map[string]bool
-	onlines map[string]bool
-	config  *NeuroConfig
-}
-
-type NeuroConfig struct {
-	Jabber *glb.Config
-	Zhobe  struct {
-		Root     string
-		FIFOPath string `yaml:"fifo_path"`
+type (
+	messageHandler struct {
+		priority uint // the more priority is, the more important it is
+		cb       func(*NeuroZhobe, *glb.MUCMessage) (bool, error)
 	}
-}
+
+	NeuroZhobe struct {
+		bot     *glb.GBot
+		admins  map[string]bool
+		onlines map[string]bool
+		config  *NeuroConfig
+	}
+
+	NeuroConfig struct {
+		Jabber *glb.Config
+		Zhobe  struct {
+			Root     string
+			FIFOPath string `yaml:"fifo_path"`
+		}
+	}
+)
 
 func (z *NeuroZhobe) OnConnect() {
 	log.Println("Connected to server")
@@ -58,7 +64,7 @@ func (z *NeuroZhobe) OnMUCMessage(msg *glb.MUCMessage) {
 	}
 
 	for _, handler := range handlers {
-		match, err := handler(z, msg)
+		match, err := handler.cb(z, msg)
 		if err != nil {
 			z.bot.Send(fmt.Sprintf("%v: 542 SHIT HAPPEND", msg.From))
 			if z.admins[msg.From] {
@@ -89,6 +95,14 @@ func readConfig() (*NeuroConfig, error) {
 	err = yaml.Unmarshal(bytes, &result)
 
 	return &result, err
+}
+
+func prepareHandlers() {
+
+	// sort slice by its priority
+	sort.Slice(handlers, func(i, j int) bool {
+		return handlers[i].priority > handlers[j].priority
+	})
 }
 
 func main() {

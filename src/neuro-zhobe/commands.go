@@ -16,7 +16,10 @@ import (
 )
 
 func init() {
-	handlers = append(handlers, commandHandler)
+	handlers = append(handlers, messageHandler{
+		priority: 100,
+		cb:       commandHandler,
+	})
 }
 
 const commandPrefix = "!"
@@ -63,7 +66,8 @@ func commandHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 		search := path.Join(z.config.Zhobe.Root, "./plugins/", path.Base(command))
 		// check if file exists
 		if _, err := os.Stat(search); os.IsNotExist(err) {
-			return true, fmt.Errorf("WAT")
+			z.bot.Send(fmt.Sprintf("%v: WAT", msg.From))
+			return true, nil
 		}
 
 		// execute plugin file
@@ -102,9 +106,12 @@ func (z *NeuroZhobe) execute(path string, args ...string) (string, error) {
 	out, _ := ioutil.ReadAll(stdout)
 	outerr, _ := ioutil.ReadAll(stderr)
 
-	cmd.Wait()
+	err := cmd.Wait()
+	if err != nil {
+		return "", err
+	}
 
-	var err error = nil
+	err = nil
 
 	if len(outerr) != 0 {
 		err = fmt.Errorf("%s", outerr)
