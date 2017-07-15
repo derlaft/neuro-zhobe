@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	handlers = append(handlers, messageHandler{
+	msgHandlers = append(msgHandlers, messageHandler{
 		priority: 100,
 		cb:       commandHandler,
 	})
@@ -24,7 +24,15 @@ func init() {
 
 const commandPrefix = "!"
 
-var commandRegexp = regexp.MustCompile(fmt.Sprintf("^%v[^ ]+", regexp.QuoteMeta(commandPrefix)))
+var (
+	commandRegexp = regexp.MustCompile(fmt.Sprintf("^%v[^ ]+", regexp.QuoteMeta(commandPrefix)))
+	stripRegexp   = regexp.MustCompile("(`|\\$|\\.\\.)")
+	quoteRegexp   = regexp.MustCompile("(\"|')")
+)
+
+func strip(s string) string {
+	return quoteRegexp.ReplaceAllString(stripRegexp.ReplaceAllString(s, ""), "“")
+}
 
 func commandHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 
@@ -94,7 +102,12 @@ func (z *NeuroZhobe) executePlugin(path, from, args string, isAdmin bool) (strin
 func (z *NeuroZhobe) execute(path string, args ...string) (string, error) {
 	// exec and get output
 
-	cmd := exec.Command(path, args...)
+	filteredArgs := make([]string, len(args))
+	for i, arg := range args {
+		filteredArgs[i] = strip(arg)
+	}
+
+	cmd := exec.Command(path, filteredArgs...)
 
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()

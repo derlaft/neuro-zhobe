@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 	"glb"
+	"log"
 	"regexp"
 )
 
 func init() {
-	handlers = append(handlers, messageHandler{
+	msgHandlers = append(msgHandlers, messageHandler{
 		cb:       callHandler,
 		priority: 100,
 	})
@@ -33,5 +34,6 @@ func callHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 		return true, nil
 	}
 
+	log.Println("coc")
 	return false, nil
 }

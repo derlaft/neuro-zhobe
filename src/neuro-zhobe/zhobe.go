@@ -18,13 +18,17 @@ import (
 var (
 	// all message handlers are there
 	// init them in separate file's init()
+	msgHandlers []messageHandler
 
-	handlers []messageHandler
+	// all onConfig handlers are there
+	configLoadedHandlers []func()
 
 	// all the running toads are stored in there
-
 	toads     = map[string]*NeuroZhobe{}
 	toadsSync sync.RWMutex
+
+	// global configuration
+	config *NeuroConfig
 )
 
 type (
@@ -41,17 +45,15 @@ type (
 	}
 
 	NeuroConfig struct {
-		Zhobe map[string]Config
+		Zhobe     map[string]Config
+		GsendHTTP string `yaml:"gsend_http"`
 	}
 
 	Config struct {
 		Jabber         *glb.Config
 		Root           string
+		GsendSecret    string        `yaml:"gsend_secret"`
 		RestartTimeout time.Duration `yaml:"restart_timeout"`
-		GSend          struct {
-			Listen string
-			Secret string
-		}
 	}
 )
 
@@ -81,7 +83,7 @@ func (z *NeuroZhobe) OnMUCMessage(msg *glb.MUCMessage) {
 		return // skip self messages
 	}
 
-	for _, handler := range handlers {
+	for _, handler := range msgHandlers {
 		match, err := handler.cb(z, msg)
 		if err != nil {
 			z.bot.Send(fmt.Sprintf("%v: 542 SHIT HAPPEND", msg.From))
@@ -116,18 +118,21 @@ func readConfig() (*NeuroConfig, error) {
 }
 
 func prepareHandlers() {
-
 	// sort slice by its priority
-	sort.Slice(handlers, func(i, j int) bool {
-		return handlers[i].priority > handlers[j].priority
+	sort.Slice(msgHandlers, func(i, j int) bool {
+		return msgHandlers[i].priority > msgHandlers[j].priority
 	})
 }
 
 func main() {
 
-	config, err := readConfig()
+	loadedConfig, err := readConfig()
 	if err != nil {
 		log.Fatal("Could not read config:", err)
+	}
+	config = loadedConfig
+	for _, cb := range configLoadedHandlers {
+		go cb()
 	}
 
 	// bind shut-down
