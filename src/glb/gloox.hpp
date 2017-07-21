@@ -50,7 +50,7 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
       if(j->connect(false)) {
         ConnectionError ce = ConnNoError;
         while(ce == ConnNoError) {
-          goSched();
+          goSched(this);
           ce = j->recv(100);
         }
       }

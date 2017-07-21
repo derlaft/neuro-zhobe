@@ -19,6 +19,8 @@ var (
 
 type (
 	GBot struct {
+		sync.Mutex
+
 		cobj          C.GBot
 		config        *Config
 		done          chan bool
@@ -111,8 +113,13 @@ func goOnTLSConnect(cobj C.GBot, status C.int) C.int {
 }
 
 //export goSched
-func goSched() {
+func goSched(cobj C.GBot) {
+
+	bot := instance(cobj)
+
+	bot.Unlock() // give some time to do stuff
 	runtime.Gosched()
+	bot.Lock()
 }
 
 //export goOnConnect
@@ -129,7 +136,7 @@ func goOnConnect(cobj C.GBot) {
 			bot.lastPong = time.Now()
 
 			for range time.Tick(time.Second) {
-				go C.BotPingRoom(bot.cobj)
+				go bot.PingRoom()
 
 				if time.Since(bot.lastPong) > bot.config.IQTimeout {
 					fmt.Println("disconnectin")
@@ -139,6 +146,13 @@ func goOnConnect(cobj C.GBot) {
 		})
 
 	}()
+}
+
+func (b *GBot) PingRoom() {
+	b.Lock()
+	defer b.Unlock()
+
+	C.BotPingRoom(b.cobj)
 }
 
 //export goOnDisconnect
@@ -236,6 +250,9 @@ func goOnError(cobj C.GBot, errcode int) {
 }
 
 func (b *GBot) Free() {
+	b.Lock()
+	defer b.Unlock()
+
 	C.BotFree(b.cobj)
 }
 
@@ -247,26 +264,41 @@ func (b *GBot) Connect(config *Config) {
 	}
 
 	go func() {
-
+		b.Lock()
 		C.BotConnect(
 			b.cobj,
 			C.CString(config.JID),
 			C.CString(config.Password),
 			C.CString(fmt.Sprintf("%v/%v", config.Conference, config.Nickname)),
 		)
+		log.Println("terminated")
+		// wait for termination
+		b.Unlock()
 	}()
 }
 
 func (b *GBot) Disconnect() {
 	b.disconnecting = true
+
+	b.Lock()
+	defer b.Unlock()
+
 	C.BotDisconnect(b.cobj)
 }
 
 func (b *GBot) Nickname() string {
-	return C.GoString(C.BotNick(b.cobj))
+	b.Lock()
+	nick := C.BotNick(b.cobj)
+	b.Unlock()
+
+	return C.GoString(nick)
 }
 
 func (b *GBot) Send(message string) {
+
+	b.Lock()
+	defer b.Unlock()
+
 	C.BotReply(
 		b.cobj,
 		C.CString(message),
@@ -274,6 +306,9 @@ func (b *GBot) Send(message string) {
 }
 
 func (b *GBot) SendPrivate(message, recipient string) {
+	b.Lock()
+	defer b.Unlock()
+
 	C.BotReplyPrivate(
 		b.cobj,
 		C.CString(message),
@@ -282,6 +317,9 @@ func (b *GBot) SendPrivate(message, recipient string) {
 }
 
 func (b *GBot) Kick(who, forWhat string) {
+	b.Lock()
+	defer b.Unlock()
+
 	C.BotKick(
 		b.cobj,
 		C.CString(who),
