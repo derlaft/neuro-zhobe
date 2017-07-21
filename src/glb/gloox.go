@@ -278,12 +278,13 @@ func (b *GBot) Connect(config *Config) {
 }
 
 func (b *GBot) Disconnect() {
-	b.disconnecting = true
-
 	b.Lock()
 	defer b.Unlock()
 
-	C.BotDisconnect(b.cobj)
+	if !b.disconnecting {
+		b.disconnecting = true
+		C.BotDisconnect(b.cobj)
+	}
 }
 
 func (b *GBot) Nickname() string {
