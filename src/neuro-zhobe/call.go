@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"glb"
-	"log"
 	"regexp"
 )
 
@@ -34,6 +33,5 @@ func callHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 		return true, nil
 	}
 
-	log.Println("coc")
 	return false, nil
 }

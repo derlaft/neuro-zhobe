@@ -7,7 +7,6 @@ import "C"
 import (
 	"fmt"
 	"log"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -114,11 +113,10 @@ func goOnTLSConnect(cobj C.GBot, status C.int) C.int {
 
 //export goSched
 func goSched(cobj C.GBot) {
-
 	bot := instance(cobj)
 
 	bot.Unlock() // give some time to do stuff
-	runtime.Gosched()
+	time.Sleep(time.Millisecond * 100)
 	bot.Lock()
 }
 
@@ -165,8 +163,6 @@ func goOnDisconnect(cobj C.GBot, errCode, authErr C.int) {
 	}
 
 	if cb, ok := bot.cb.(OnDisconnect); ok {
-		fmt.Println("ehoh", bot.disconnecting)
-
 		cb.OnDisconnect(err)
 	}
 
@@ -174,12 +170,14 @@ func goOnDisconnect(cobj C.GBot, errCode, authErr C.int) {
 }
 
 //export goOnMessage
-func goOnMessage(cobj C.GBot, raw_from, raw_msg *C.char, history, private bool) {
+func goOnMessage(cobj C.GBot, raw_from, raw_msg *C.char, raw_history, raw_private bool) {
 
 	var (
-		bot  = instance(cobj)
-		from = C.GoString(raw_from)
-		msg  = C.GoString(raw_msg)
+		bot     = instance(cobj)
+		from    = C.GoString(raw_from)
+		msg     = C.GoString(raw_msg)
+		history = raw_history
+		private = raw_private
 	)
 
 	go func() {
