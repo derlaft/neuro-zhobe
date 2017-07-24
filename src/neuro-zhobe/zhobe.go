@@ -55,6 +55,8 @@ type (
 		GsendSecret    string        `yaml:"gsend_secret"`
 		RestartTimeout time.Duration `yaml:"restart_timeout"`
 	}
+
+	PublicError error
 )
 
 func (z *NeuroZhobe) OnConnect() {
@@ -86,11 +88,18 @@ func (z *NeuroZhobe) OnMUCMessage(msg *glb.MUCMessage) {
 	for _, handler := range msgHandlers {
 		match, err := handler.cb(z, msg)
 		if err != nil {
-			z.bot.Send(fmt.Sprintf("%v: 542 SHIT HAPPEND", msg.From))
-			if z.admins[msg.From] {
-				z.bot.SendPrivate(err.Error(), msg.From)
+			if _, public := err.(PublicError); public {
+				// public errors can be directly sent to chat
+				z.bot.Send(fmt.Sprintf("%v: %v", msg.From, err.Error()))
+			} else {
+				// any other error is considered private
+				// and sent only to OP to PM
+				z.bot.Send(fmt.Sprintf("%v: 542 SHIT HAPPEND", msg.From))
+				if z.admins[msg.From] {
+					z.bot.SendPrivate(err.Error(), msg.From)
+				}
+				return
 			}
-			return
 		}
 
 		if match {

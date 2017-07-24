@@ -15,12 +15,7 @@ import (
 	"strings"
 )
 
-func init() {
-	msgHandlers = append(msgHandlers, messageHandler{
-		priority: 100,
-		cb:       commandHandler,
-	})
-}
+type cmdHandler func(z *NeuroZhobe, msg *glb.MUCMessage, params string) error
 
 const commandPrefix = "!"
 
@@ -28,7 +23,16 @@ var (
 	commandRegexp = regexp.MustCompile(fmt.Sprintf("^%v[^ ]+", regexp.QuoteMeta(commandPrefix)))
 	stripRegexp   = regexp.MustCompile("(`|\\$|\\.\\.)")
 	quoteRegexp   = regexp.MustCompile("(\"|')")
+
+	commands = map[string]cmdHandler{}
 )
+
+func init() {
+	msgHandlers = append(msgHandlers, messageHandler{
+		priority: 100,
+		cb:       commandHandler,
+	})
+}
 
 func strip(s string) string {
 	return quoteRegexp.ReplaceAllString(stripRegexp.ReplaceAllString(s, ""), "“")
@@ -56,41 +60,27 @@ func commandHandler(z *NeuroZhobe, msg *glb.MUCMessage) (bool, error) {
 		params = tokens[1] // params  (!help >cococo coco co<)
 	}
 
-	switch command {
-	case "megakick": // implement kick as a built-in
-
-		// there we make various checks, but in general we have no way to find out if kick fails for now
-		if z.admins[params] || !z.onlines[params] || !z.admins[z.bot.Nickname()] {
-			return true, fmt.Errorf("Can't megakick %v", params)
-		} else if !z.admins[msg.From] {
-			return true, fmt.Errorf("GTFO")
-		}
-
-		z.bot.Kick(params, "megakick")
-		return true, nil
-
-	default:
-
-		search := path.Join(z.config.Root, "./plugins/", path.Base(command))
-		// check if file exists
-		if _, err := os.Stat(search); os.IsNotExist(err) {
-			z.bot.Send(fmt.Sprintf("%v: WAT", msg.From))
-			return true, nil
-		}
-
-		// execute plugin file
-		result, err := z.executePlugin(search, msg.From, params, z.admins[msg.From])
-		if result > "" {
-			z.bot.Send(result)
-		}
-		if err != nil {
-			return true, err
-		}
-
-		return true, nil
+	handler, builtin := commands[command]
+	if builtin && handler != nil {
+		return true, handler(z, msg, params)
 	}
 
-	return true, fmt.Errorf("WAT")
+	search := path.Join(z.config.Root, "./plugins/", path.Base(command))
+	// check if file exists
+	if _, err := os.Stat(search); os.IsNotExist(err) {
+		return true, PublicError(fmt.Errorf("%v: WAT", msg.From))
+	}
+
+	// execute plugin file
+	result, err := z.executePlugin(search, msg.From, params, z.admins[msg.From])
+	if result > "" {
+		z.bot.Send(result)
+	}
+	if err != nil {
+		return true, err
+	}
+
+	return true, nil
 }
 
 // return values: stdout, true if path binary/script is found, err if any
