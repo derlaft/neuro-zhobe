@@ -150,26 +150,19 @@ class Bot : public ConnectionListener, MUCRoomHandler, LogHandler, EventHandler 
     }
 
     virtual void handleMUCParticipantPresence( MUCRoom *room, const MUCRoomParticipant participant, const Presence& presence ){
-        // implement automatic rejoin
-        if (presence.presence() == Presence::Unavailable && participant.nick->resource() == room->nick()) {
-            printf("rejoinin\n");
-            this->rejoin();
-        }
 
-        // every online-ish status
-        int online = presence.presence() == Presence::Available || 
-            presence.presence() == Presence::Chat || 
-            presence.presence() == Presence::Away || 
-            presence.presence() == Presence::DND || 
-            presence.presence() == Presence::XA;
-
-        int admin = (participant.affiliation == MUCRoomAffiliation::AffiliationOwner || 
-            participant.affiliation == MUCRoomAffiliation::AffiliationAdmin) &&
-            (participant.role == MUCRoomRole::RoleModerator);
+        int self = participant.nick->resource() == room->nick();
 
         auto nick = participant.nick != NULL ? (char *) participant.nick->resource().c_str() : NULL;
 
-        goOnPresence(this, nick, online, admin);
+        goOnPresence(
+                this,
+                nick,
+                self,
+                int(presence.presence()), 
+                int(participant.affiliation),
+                int(participant.role)
+        );
     }
 
     virtual void rejoin() {

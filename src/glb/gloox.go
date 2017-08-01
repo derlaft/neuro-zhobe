@@ -49,6 +49,7 @@ type (
 		Nick   string
 		Online bool
 		Admin  bool
+		Self   bool
 	}
 
 	// callback interfaces
@@ -159,7 +160,10 @@ func goOnDisconnect(cobj C.GBot, errCode, authErr C.int) {
 
 	var err error
 	if errCode > 0 || authErr > 0 {
-		err = fmt.Errorf("gld: dissonnected with error (errCode=%v, authError=%v)", errCode, authErr)
+		err = DisconnectError{
+			ConnectionError:     ConnectionError(errCode),
+			AuthenticationError: AuthenticationError(authErr),
+		}
 	}
 
 	if cb, ok := bot.cb.(OnDisconnect); ok {
@@ -193,22 +197,49 @@ func goOnMessage(cobj C.GBot, raw_from, raw_msg *C.char, raw_history, raw_privat
 }
 
 //export goOnPresence
-func goOnPresence(cobj C.GBot, raw_nick *C.char, raw_online, raw_admin bool) {
+func goOnPresence(cobj C.GBot, raw_nick *C.char, raw_self, raw_presence, raw_affiliation, raw_role C.int) {
 
 	var (
-		bot    = instance(cobj)
-		nick   = C.GoString(raw_nick)
-		online = raw_online
-		admin  = raw_admin
+		bot         = instance(cobj)
+		nick        = C.GoString(raw_nick)
+		self        = raw_self > 0
+		presence    = PresenceType(raw_presence)
+		affiliation = Affiliation(raw_affiliation)
+		role        = Role(raw_role)
 	)
 
 	go func() {
+
+		var (
+			online = false
+			admin  = false
+		)
+
+		switch presence {
+		case PresenceAvailable, PresenceChat,
+			PresenceAway, PresenceDND, PresenceXA:
+
+			online = true
+		}
+
+		admin = role == RoleModerator &&
+			(affiliation == AffiliationOwner || affiliation == AffiliationAdmin)
+
+		// we must do something when conference is exp. weirdo issues.
+		// let's just disconnect for now
+		if self {
+			switch presence {
+			case PresenceInvalid, PresenceError, PresenceUnavailable:
+				go bot.Disconnect()
+			}
+		}
 
 		if cb, ok := bot.cb.(OnMUCPresence); ok {
 			cb.OnMUCPresence(&MUCPresence{
 				Nick:   nick,
 				Online: online,
 				Admin:  admin,
+				Self:   self,
 			})
 		}
 	}()
